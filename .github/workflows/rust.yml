@@ -16,7 +16,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
     - name: Build
       run: cargo build --verbose
+    
+    - name: Linter
+      run: cargo clippy -- -D warnings  
+
     - name: Run tests
       run: cargo test --verbose
