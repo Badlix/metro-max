@@ -24,7 +24,8 @@ fn main() {
 
 fn parse(args: Vec<String>, index: usize) -> usize {
     match args[index].as_str() {
-        "-h" => options::help::help(),
+        "-v" | "--version" => options::version::version(),
+        "-h" | "--help" => options::help::help(),
         _ => 1
     }
 }
