@@ -1,31 +1,21 @@
 use colored::Colorize;
 use std::env;
+use clap::Parser;
 mod options;
+mod commands;
+
+#[derive(Parser)]
+#[command(version, about = "A rust CLI for music !")]
+struct SimpleCLI {}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let args_len: usize = args.len();
+    SimpleCLI::parse();
 
-    if args_len == 1 {
-        println!("{}", "Metromax".blue().bold());
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() == 1 {
+        println!("{}", "METROMAX".blue().bold());
         println!("\n{}", "See --help".blue().bold());
         return;
-    }
-    
-    let mut next_arg_index: usize = 1;
-    while next_arg_index < args_len {
-        let fn_return_val = parse(args.clone(), next_arg_index);
-        if fn_return_val == 0 {
-            break;
-        }
-        next_arg_index += fn_return_val;
-    }
-}
-
-fn parse(args: Vec<String>, index: usize) -> usize {
-    match args[index].as_str() {
-        "-v" | "--version" => options::version::version(),
-        "-h" | "--help" => options::help::help(),
-        _ => 1
     }
 }
