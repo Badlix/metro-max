@@ -2,7 +2,6 @@ use colored::Colorize;
 use std::env;
 use clap::Parser;
 mod options;
-mod commands;
 
 #[derive(Parser)]
 #[command(version, about = "A rust CLI for music !")]
@@ -16,6 +15,5 @@ fn main() {
     if args.len() == 1 {
         println!("{}", "METROMAX".blue().bold());
         println!("\n{}", "See --help".blue().bold());
-        return;
     }
 }
