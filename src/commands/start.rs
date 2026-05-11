@@ -7,13 +7,21 @@ use std::time::{Instant};
 use clap::{Args};
 
 #[derive(Args)]
+#[command(about)]
 pub struct StartArgs {
+
     #[arg(value_parser = clap::value_parser!(u64).range(1..301))]
     pub bpm: u64, 
+    
+    /// Number of beats per measure
     #[arg(short, default_value_t = 4)]
     pub beat_number: u16,
+
+    /// List of accented beat numbers
     #[arg(long("acc-notes"), value_delimiter = ',', default_values_t = vec![1])]
     pub big_key_index: Vec<u16>,
+
+    /// Run the metronome in visual-only mode
     #[arg(short, long, default_value_t=false)]
     pub quiet: bool,
 }

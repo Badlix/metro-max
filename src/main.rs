@@ -12,7 +12,9 @@ struct SimpleCLI {
 }
 
 #[derive(Subcommand)]
+#[command(about)]
 enum CommandsEnum {
+    /// Start the metronome with a specified BPM
     Start(commands::start::StartArgs)
 }
 
