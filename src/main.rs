@@ -28,7 +28,7 @@ fn main() {
 
     match &cli.command {
         CommandsEnum::Start(args) => {
-            commands::start::start(args.bpm, args.beat_number, args.big_key_index.clone());
+            commands::start::start(args.bpm, args.beat_number, args.big_key_index.clone(), args.quiet);
         }
     }
 }
