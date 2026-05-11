@@ -74,7 +74,7 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
 
         std::io::stdout().flush().unwrap();
 
-        if quiet == false {
+        if !quiet {
             let freq = if big_key_index.contains(&beat) { 880.0 } else { 440.0 };
             let source = SineWave::new(freq).take_duration(Duration::from_millis(50)).amplify(0.5);
             mixer.add(source);
