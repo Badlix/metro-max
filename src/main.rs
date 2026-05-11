@@ -16,6 +16,10 @@ enum CommandsEnum {
     Start(commands::start::StartArgs)
 }
 
+#[derive(Parser)]
+#[command(version, about = "A rust CLI for music !")]
+struct SimpleCLI {}
+
 fn main() {
     let cli = SimpleCLI::parse();
 
