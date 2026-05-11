@@ -7,16 +7,26 @@ use std::time::{Instant};
 use clap::{Args};
 
 #[derive(Args)]
+#[command(about)]
 pub struct StartArgs {
+
     #[arg(value_parser = clap::value_parser!(u64).range(1..301))]
     pub bpm: u64, 
+    
+    /// Number of beats per measure
     #[arg(short, default_value_t = 4)]
     pub beat_number: u16,
-    #[arg(short('t'), value_delimiter = ',', default_values_t = vec![1])]
+
+    /// List of accented beat numbers
+    #[arg(long("acc-notes"), value_delimiter = ',', default_values_t = vec![1])]
     pub big_key_index: Vec<u16>,
+
+    /// Run the metronome in visual-only mode
+    #[arg(short, long, default_value_t=false)]
+    pub quiet: bool,
 }
 
-pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>) {
+pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
     #[cfg(target_os = "windows")]
     unsafe {
         winapi::um::timeapi::timeBeginPeriod(1);
@@ -64,12 +74,11 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>) {
 
         std::io::stdout().flush().unwrap();
 
-        let freq = if big_key_index.contains(&beat) { 880.0 } else { 440.0 };
-        let source = SineWave::new(freq)
-            .take_duration(Duration::from_millis(50))
-            .amplify(0.5);
-
-        mixer.add(source);
+        if !quiet {
+            let freq = if big_key_index.contains(&beat) { 880.0 } else { 440.0 };
+            let source = SineWave::new(freq).take_duration(Duration::from_millis(50)).amplify(0.5);
+            mixer.add(source);
+        }
 
         beat += 1;
         if beat > beat_nb {
