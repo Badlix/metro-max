@@ -167,7 +167,7 @@ fn red_or_white(pattern : String, is_current_beat : bool) -> String {
     if is_current_beat {
         return pattern.red().to_string();
     }
-    return pattern
+    pattern
 }
 
 fn put_cursor_up(repeat : usize) {
@@ -180,10 +180,10 @@ fn put_cursor_up(repeat : usize) {
 fn put_cursor_down(repeat : usize) {
     let line_down = get_visual_height(repeat);
     for _ in 0..line_down {
-        println!(""); 
+        println!(); 
     }
 }
 
 fn get_visual_height(scale : usize) -> usize{
-    return 6*scale;
+    6*scale
 }
