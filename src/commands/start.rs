@@ -24,9 +24,14 @@ pub struct StartArgs {
     /// Run the metronome in visual-only mode
     #[arg(short, long, default_value_t=false)]
     pub quiet: bool,
+
+    /// Scale of the metronome visual (max 3)
+    #[arg(short, long, default_value_t=1, value_parser = clap::value_parser!(i8).range(1..4))]
+    pub scale: i8,
 }
 
-pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
+
+pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool, scale: i8) {
     #[cfg(target_os = "windows")]
     unsafe {
         winapi::um::timeapi::timeBeginPeriod(1);
@@ -46,7 +51,7 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
 
     let mut beat : u16 = 1;
 
-    print_description(bpm);
+    print_description(bpm, scale as usize);
 
     let start = Instant::now();
 
@@ -70,7 +75,7 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
         
         let ts = start.elapsed().as_millis();
 
-        print_interval(beat, beat_nb, big_key_index.clone());
+        print_interval(beat, beat_nb, big_key_index.clone(), scale as usize);
 
         std::io::stdout().flush().unwrap();
 
@@ -93,65 +98,92 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool) {
     }
 }
 
-fn print_description(bpm: u64) {
-    println!("{} {} {}", "Starting metronome at".green(), bpm.to_string().yellow().bold(), "BPM".green());
+fn print_description(bpm: u64, scale: usize) {
+    // Hide cursor
     print!("\x1B[?25l");
     std::io::stdout().flush().unwrap();
 
+    // Quit and reshow cursor
     ctrlc::set_handler(|| {
-        print!("\x1B[2B"); // put cursor at the next free line
-        print!("\x1B[?25h"); // show cursor when user quit
+        print!("\x1B[2B"); 
+        print!("\x1B[?25h"); 
         std::io::stdout().flush().unwrap();
         std::process::exit(0);
     }).unwrap();
 
-    for _ in 0..8 {
-        println!();
-    }
+
+    println!("{} {} {}", "Starting metronome at".green(), bpm.to_string().yellow().bold(), "BPM".green());
+
+    println!();
+    put_cursor_down(scale); // Future space for the visual
+    println!();
 
     println!("Press Ctrl+C to stop\n");
     print!("\x1B[3A"); 
 }
 
-fn print_interval(current_beat : u16, nb_beat: u16, big_key_index: Vec<u16>) {
-    let white_top : String = " --- ".to_string();
-    let white_bar : String = "|   |".to_string();
-    let red_top   : String = " --- ".red().to_string();
-    let red_bar   : String = "|   |".red().to_string();
-    let empty_bar : String = "     ".to_string();
+fn print_interval(current_beat : u16, nb_beat: u16, big_key_index: Vec<u16>, scale: usize) {
+    let top_pattern  = format!(" {} ", "---".repeat(scale));
+    let side_pattern = format!("|{}|", "   ".repeat(scale));
+    let empty_space  = format!(" {} ", "   ".repeat(scale));
 
-    print!("\x1B[6A"); // move cursor 6 lines up
+    let visual_height = get_visual_height(scale);  
+    let big_beat_top_line = [0, visual_height - 1];      
+    let small_beat_top_line = [scale, visual_height - 1 - scale]; 
 
-    for line_nb in 0..6 {
-        let mut line_to_display : String= "".to_string();
+    put_cursor_up(scale);
+
+    for current_line in 0..visual_height {
+        let mut line_to_display : String = "".to_string();
 
         for beat_nb in 1..nb_beat+1 {
-            // Draw big bip top and bottom bar
-            if line_nb == 0 || line_nb == 5 {
-                if big_key_index.contains(&beat_nb) {
-                    if current_beat == beat_nb {
-                        line_to_display = format!("{} {}", line_to_display, red_top);
-                    } else {
-                        line_to_display = format!("{} {}", line_to_display, white_top);
-                    }
+
+            let is_current_beat = current_beat == beat_nb;
+            let new_pattern : &String;
+
+            if big_key_index.contains(&beat_nb) {
+                if big_beat_top_line.contains(&current_line) {
+                    new_pattern = &top_pattern;
                 } else {
-                    line_to_display = format!("{} {}", line_to_display, empty_bar);
+                    new_pattern = &side_pattern;
                 }
-            // Draw small bip top and bottom bar
-            } else if (line_nb == 1 || line_nb == 4) && !big_key_index.contains(&beat_nb)  {
-                if current_beat == beat_nb {
-                    line_to_display = format!("{} {}", line_to_display, red_top);
-                } else {
-                    line_to_display = format!("{} {}", line_to_display, white_top);
-                } 
             } else {
-                if current_beat == beat_nb {
-                    line_to_display = format!("{} {}", line_to_display, red_bar);
+                if small_beat_top_line.contains(&current_line) {
+                    new_pattern = &top_pattern;
+                } else if current_line < small_beat_top_line[0] || current_line > small_beat_top_line[1] {
+                    new_pattern = &empty_space;
                 } else {
-                    line_to_display = format!("{} {}", line_to_display, white_bar);
+                    new_pattern = &side_pattern;
                 }
-            }    
+            }
+
+            line_to_display = format!("{}{}{}", line_to_display, " ".repeat(scale), red_or_white(new_pattern.clone(), is_current_beat));
         }
         print!("\r{}\n", line_to_display);
     }
+}
+
+fn red_or_white(pattern : String, is_current_beat : bool) -> String {
+    if is_current_beat {
+        return pattern.red().to_string();
+    }
+    return pattern
+}
+
+fn put_cursor_up(repeat : usize) {
+    let line_up = get_visual_height(repeat);
+    for _ in 0..line_up {
+        print!("\x1B[1A"); 
+    }
+}
+
+fn put_cursor_down(repeat : usize) {
+    let line_down = get_visual_height(repeat);
+    for _ in 0..line_down {
+        println!(""); 
+    }
+}
+
+fn get_visual_height(scale : usize) -> usize{
+    return 6*scale;
 }
