@@ -6,6 +6,8 @@ use std::io::Write;
 use std::time::{Instant};
 use clap::{Args};
 
+// - - - PARSE ARGUMENTS - - -
+
 #[derive(Args)]
 #[command(about)]
 pub struct StartArgs {
@@ -22,7 +24,7 @@ pub struct StartArgs {
     pub big_key_index: Vec<u16>,
 
     /// Run the metronome in visual-only mode
-    #[arg(short, long, default_value_t=false)]
+    #[arg(short, long)]
     pub quiet: bool,
 
     /// Scale of the metronome visual (max 3)
@@ -30,20 +32,43 @@ pub struct StartArgs {
     pub scale: i8,
 }
 
+// - - - CONSTANT / DATA STRUCTURE - - - 
+
+const HIDE_CURSOR :&str = "\x1B[?25l";
+const SHOW_CURSOR :&str = "\x1B[?25h";
+
+macro_rules! cursor_move_down {
+    ($n:expr) => { 
+        print!("\x1B[{}B", $n);
+    } 
+}
+
+macro_rules! cursor_move_up {
+    ($n:expr) => { 
+        print!("\x1B[{}A", $n);
+    } 
+}
+
+struct Patterns {
+    top:   String,
+    side:  String,
+    empty: String,
+}
+
+impl Patterns {
+    fn new(scale: usize) -> Self {
+        Self {
+            top:   format!(" {} ", "---".repeat(scale)),
+            side:  format!("|{}|", "   ".repeat(scale)),
+            empty: format!(" {} ", "   ".repeat(scale)),
+        }
+    }
+}
+
+// - - - COMMAND IMPLEMENTATION - - -
 
 pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool, scale: i8) {
-    #[cfg(target_os = "windows")]
-    unsafe {
-        winapi::um::timeapi::timeBeginPeriod(1);
-        let thread = winapi::um::processthreadsapi::GetCurrentThread();
-        winapi::um::processthreadsapi::SetThreadPriority(
-            thread,
-            winapi::um::winbase::THREAD_PRIORITY_TIME_CRITICAL as i32,
-        );
-    }
-
-    let interval_ms = 60_000 / bpm;
-    let interval = Duration::from_millis(interval_ms);
+    let interval = Duration::from_millis(60_000 / bpm);
     let mut next_tick = Instant::now();
 
     let handle = DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
@@ -51,9 +76,8 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool, scale
 
     let mut beat : u16 = 1;
 
+    let patterns = Patterns::new(scale as usize);
     print_description(bpm, scale as usize);
-
-    let start = Instant::now();
 
     loop {
 
@@ -72,10 +96,8 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool, scale
                 std::hint::spin_loop();
             }
         }
-        
-        let ts = start.elapsed().as_millis();
 
-        print_interval(beat, beat_nb, big_key_index.clone(), scale as usize);
+        show_visual(beat, beat_nb, &big_key_index, &patterns, scale as usize);
 
         std::io::stdout().flush().unwrap();
 
@@ -85,56 +107,38 @@ pub fn start(bpm: u64, beat_nb: u16, big_key_index: Vec<u16>, quiet: bool, scale
             mixer.add(source);
         }
 
-        beat += 1;
-        if beat > beat_nb {
-            beat = 1;
-        }
-        
-        // TODO : for debug
-        let ts2 = start.elapsed().as_millis();
-        if ts2 - ts  > 300 {
-            println!("{} : {}", "Delay !".red().bold(), ((ts2 - ts).to_string().red()));
-        }
+        beat = (beat % (beat_nb+1)) + 1;
     }
 }
 
 fn print_description(bpm: u64, scale: usize) {
-    // Hide cursor
-    print!("\x1B[?25l");
+    print!("{}", HIDE_CURSOR);
     std::io::stdout().flush().unwrap();
 
     // Quit and reshow cursor
     ctrlc::set_handler(|| {
-        print!("\x1B[2B"); 
-        print!("\x1B[?25h"); 
+        cursor_move_down!(2);
+        print!("{}", SHOW_CURSOR); 
         std::io::stdout().flush().unwrap();
         std::process::exit(0);
     }).unwrap();
 
 
     println!("{} {} {}", "Starting metronome at".green(), bpm.to_string().yellow().bold(), "BPM".green());
-
-    println!();
-    put_cursor_down(scale); // Future space for the visual
-    println!();
-
+    put_cursor_under_visual(scale);
     println!("Press Ctrl+C to stop\n");
-    print!("\x1B[3A"); 
+    cursor_move_up!(3);
 }
 
-fn print_interval(current_beat : u16, nb_beat: u16, big_key_index: Vec<u16>, scale: usize) {
-    let top_pattern  = format!(" {} ", "---".repeat(scale));
-    let side_pattern = format!("|{}|", "   ".repeat(scale));
-    let empty_space  = format!(" {} ", "   ".repeat(scale));
-
+fn show_visual(current_beat : u16, nb_beat: u16, big_key_index: &[u16], patterns :&Patterns, scale: usize) {
     let visual_height = get_visual_height(scale);  
     let big_beat_top_line = [0, visual_height - 1];      
     let small_beat_top_line = [scale, visual_height - 1 - scale]; 
 
-    put_cursor_up(scale);
+    put_cursor_above_visual(scale);
 
     for current_line in 0..visual_height {
-        let mut line_to_display : String = "".to_string();
+        let mut line_to_display = String::new();
 
         for beat_nb in 1..nb_beat+1 {
 
@@ -143,45 +147,39 @@ fn print_interval(current_beat : u16, nb_beat: u16, big_key_index: Vec<u16>, sca
 
             if big_key_index.contains(&beat_nb) {
                 if big_beat_top_line.contains(&current_line) {
-                    new_pattern = &top_pattern;
+                    new_pattern = &patterns.top;
                 } else {
-                    new_pattern = &side_pattern;
+                    new_pattern = &patterns.side;
                 }
             } else {
                 if small_beat_top_line.contains(&current_line) {
-                    new_pattern = &top_pattern;
+                    new_pattern = &patterns.top;
                 } else if current_line < small_beat_top_line[0] || current_line > small_beat_top_line[1] {
-                    new_pattern = &empty_space;
+                    new_pattern = &patterns.empty;
                 } else {
-                    new_pattern = &side_pattern;
+                    new_pattern = &patterns.side;
                 }
             }
 
-            line_to_display = format!("{}{}{}", line_to_display, " ".repeat(scale), red_or_white(new_pattern.clone(), is_current_beat));
+            line_to_display = format!("{}{}{}", line_to_display, " ".repeat(scale), red_or_white(new_pattern, is_current_beat));
         }
         print!("\r{}\n", line_to_display);
     }
 }
 
-fn red_or_white(pattern : String, is_current_beat : bool) -> String {
-    if is_current_beat {
-        return pattern.red().to_string();
-    }
-    pattern
-}
-
-fn put_cursor_up(repeat : usize) {
-    let line_up = get_visual_height(repeat);
-    for _ in 0..line_up {
-        print!("\x1B[1A"); 
+fn red_or_white(pattern: &str, is_current_beat: bool) -> String {
+    match is_current_beat {
+        true  => pattern.red().to_string(),
+        false => pattern.to_string(),
     }
 }
 
-fn put_cursor_down(repeat : usize) {
-    let line_down = get_visual_height(repeat);
-    for _ in 0..line_down {
-        println!(); 
-    }
+fn put_cursor_above_visual(scale : usize) {
+    print!("\x1B[{}A", get_visual_height(scale));
+}
+
+fn put_cursor_under_visual(scale : usize) {
+    cursor_move_down!(get_visual_height(scale) + 2);
 }
 
 fn get_visual_height(scale : usize) -> usize{
